@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Bot } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { UserCredentials } from '../types';
+import InteractiveBotIcon from './InteractiveBotIcon';
 
 type AuthMode = 'login' | 'signup';
 
@@ -59,7 +60,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ mode, onClose, onAuthSuccess }) =
           
           <div className="flex flex-col items-center mb-6">
             <div className="bg-[var(--bg-input)] p-3 rounded-xl mb-3 shadow-lg shadow-[var(--shadow-color)]">
-              <Bot className="w-8 h-8 text-[var(--accent-color-1)]" />
+              <InteractiveBotIcon state="idle" className="w-8 h-8 text-[var(--accent-color-1)]" />
             </div>
             <h2 className="text-2xl font-bold text-[var(--text-primary)]">{currentMode === 'login' ? 'Welcome Back!' : 'Create Account'}</h2>
             <p className="text-[var(--text-secondary)] text-sm">{currentMode === 'login' ? 'Log in to your PAL AI account' : 'Get started with your own AI assistant'}</p>

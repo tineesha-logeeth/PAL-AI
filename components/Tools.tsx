@@ -1,4 +1,5 @@
 import React from 'react';
+import { marked } from 'marked';
 import { Loader2, Wand2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import AutoCorrectingTextarea from './AutoCorrectingTextarea';
@@ -7,7 +8,7 @@ import { ToolsState, Task, Model } from '../types';
 interface ToolsProps {
   state: ToolsState;
   setState: React.Dispatch<React.SetStateAction<ToolsState>>;
-  onPerformTask: () => void;
+  onPerformTask: (state: ToolsState) => void;
 }
 
 const modelInfo: Record<Model, string> = {
@@ -69,18 +70,19 @@ const Tools: React.FC<ToolsProps> = ({ state, setState, onPerformTask }) => {
                      <Loader2 className="w-8 h-8 text-[var(--accent-color-1)] animate-spin" />
                  </div>
              )}
-            <motion.div 
+            <motion.div
                 key={outputText}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="prose prose-sm text-[var(--prose-color)] whitespace-pre-wrap"
+                className="prose prose-sm text-[var(--prose-text-color)]"
+                dangerouslySetInnerHTML={outputText ? { __html: marked.parse(outputText) as string } : undefined}
             >
-              {outputText || <span className="text-[var(--text-secondary)]">Output will appear here...</span>}
+              {!outputText && <span className="text-[var(--text-secondary)]">Output will appear here...</span>}
             </motion.div>
           </div>
         </div>
         <button
-          onClick={onPerformTask}
+          onClick={() => onPerformTask(state)}
           disabled={isLoading || !inputText.trim()}
           className="w-full md:w-1/2 mx-auto flex items-center justify-center gap-2 bg-[var(--bg-button-primary)] text-[var(--text-button-primary)] p-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--bg-button-primary-hover)] transition-all font-semibold shadow-lg hover:shadow-[var(--shadow-color-accent)]"
         >

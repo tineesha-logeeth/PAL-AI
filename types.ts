@@ -7,6 +7,11 @@ export interface ChatMessage {
   role: 'user' | 'model';
   content: string;
   sources?: Source[];
+  attachment?: {
+    data: string;
+    mimeType: string;
+    previewUrl: string;
+  };
 }
 
 export interface User {
@@ -24,8 +29,11 @@ export interface UserCredentials {
 export interface ImageGeneratorState {
   prompt: string;
   isLoading: boolean;
-  imageUrl: string | null;
+  generatedImageUrl: string | null;
+  generatedDescription: string | null;
   error: string | null;
+  mode: 'create' | 'describe';
+  uploadedImage: { data: string; mimeType: string; previewUrl: string } | null;
 }
 
 export type Task = 'summarize' | 'proofread' | 'rephrase';
@@ -37,4 +45,11 @@ export interface ToolsState {
   isLoading: boolean;
   selectedTask: Task;
   selectedModel: Model;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  timestamp: number;
 }

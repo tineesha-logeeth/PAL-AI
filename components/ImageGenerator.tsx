@@ -1,30 +1,34 @@
-import React from 'react';
-import { Image as ImageIcon, Loader2, Sparkles, Download } from 'lucide-react';
-import { motion } from 'framer-motion';
+import React, { useRef, useState } from 'react';
+import { marked } from 'marked';
+import { Image as ImageIcon, Loader2, Sparkles, Download, ArrowRightLeft, UploadCloud, Paperclip, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import AutoCorrectingTextarea from './AutoCorrectingTextarea';
 import { ImageGeneratorState } from '../types';
 
 interface ImageGeneratorProps {
   state: ImageGeneratorState;
   setState: React.Dispatch<React.SetStateAction<ImageGeneratorState>>;
-  onGenerate: () => void;
+  onGenerate: (state: ImageGeneratorState) => void;
+  onDescribe: (state: ImageGeneratorState) => void;
 }
 
 const LoadingState = () => (
-    <div className="absolute inset-0 bg-[var(--bg-card)]/80 flex flex-col justify-center items-center gap-4 transition-opacity duration-300 z-10">
+    <div className="absolute inset-0 bg-[var(--bg-card)]/80 flex flex-col justify-center items-center gap-4 transition-opacity duration-300 z-20">
         <Loader2 className="w-12 h-12 text-[var(--accent-color-1)] animate-spin" />
-        <p className="text-lg text-[var(--text-primary)] font-medium">Generating your masterpiece...</p>
+        <p className="text-lg text-[var(--text-primary)] font-medium">Processing your request...</p>
         <p className="text-sm text-[var(--text-secondary)]">This can take a moment.</p>
     </div>
 );
 
-const ImageGenerator: React.FC<ImageGeneratorProps> = ({ state, setState, onGenerate }) => {
-  const { prompt, isLoading, imageUrl, error } = state;
+const ImageGenerator: React.FC<ImageGeneratorProps> = ({ state, setState, onGenerate, onDescribe }) => {
+  const { prompt, isLoading, generatedImageUrl, generatedDescription, error, mode, uploadedImage } = state;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && mode === 'create') {
       e.preventDefault();
-      onGenerate();
+      onGenerate(state);
     }
   };
 
@@ -32,61 +36,190 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({ state, setState, onGene
     setState(prev => ({ ...prev, prompt: newPrompt }));
   };
 
+  const setMode = (newMode: 'create' | 'describe') => {
+    setState(prev => ({
+        ...prev,
+        mode: newMode,
+        error: null,
+        generatedImageUrl: null, 
+        generatedDescription: null,
+    }));
+  };
+  
+  const processFile = (file: File | undefined | null) => {
+    if (file && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const result = reader.result as string;
+            const base64Data = result.split(',')[1];
+            setState(prev => ({
+                ...prev,
+                uploadedImage: {
+                    data: base64Data,
+                    mimeType: file.type,
+                    previewUrl: result,
+                },
+                generatedDescription: null,
+                error: null,
+            }));
+        };
+        reader.readAsDataURL(file);
+    }
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    processFile(event.target.files?.[0]);
+    if(event.target) event.target.value = '';
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (mode === 'describe' && e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+        setIsDragging(true);
+    }
+  };
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); e.stopPropagation(); setIsDragging(false);
+  };
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); e.stopPropagation();
+  };
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); e.stopPropagation();
+    if(mode === 'describe') {
+        setIsDragging(false);
+        processFile(e.dataTransfer.files?.[0]);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setState(prev => ({ ...prev, uploadedImage: null }));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const mainAction = () => {
+    if (mode === 'create') {
+        onGenerate(state);
+    } else {
+        onDescribe(state);
+    }
+  };
+  const isButtonDisabled = isLoading || (mode === 'create' && !prompt.trim()) || (mode === 'describe' && !uploadedImage);
+
   return (
-    <div className="flex flex-col h-full p-4 md:p-6 overflow-y-auto">
+    <div 
+        className="flex flex-col h-full p-4 md:p-6 overflow-y-auto relative"
+        onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}
+    >
+      <AnimatePresence>
+        {isDragging && (
+            <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="absolute inset-2 bg-[var(--bg-main)]/80 flex flex-col justify-center items-center z-30 border-4 border-dashed border-[var(--accent-color-1)] rounded-2xl"
+            >
+                <UploadCloud className="w-16 h-16 text-[var(--accent-color-1)]" />
+                <p className="mt-4 text-xl font-semibold text-[var(--text-primary)]">Drop image to describe</p>
+            </motion.div>
+        )}
+      </AnimatePresence>
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
         <div className="bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-2xl p-6 flex flex-col gap-4 shadow-2xl shadow-[var(--shadow-color)]">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Create Your Image</h3>
-          <p className="text-[var(--text-secondary)] text-sm">Describe the image you want to create. Be as detailed as you like for the best results!</p>
-          <AutoCorrectingTextarea
-            value={prompt}
-            setValue={setPrompt}
-            onKeyPress={handleKeyPress}
-            placeholder="e.g., A majestic crystal palace on a floating island, surrounded by glowing waterfalls, digital art"
-            className="flex-1 w-full bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-xl p-3 text-[var(--text-primary)] focus:ring-2 focus:ring-[var(--accent-color-1)] focus:outline-none transition-all resize-none placeholder:text-[var(--text-secondary)]"
-            containerClassName="flex-1 min-h-[150px] md:min-h-0"
-            rows={6}
-            disabled={isLoading}
-          />
-          <button
-            onClick={onGenerate}
-            disabled={isLoading || !prompt.trim()}
-            className="w-full flex items-center justify-center gap-2 bg-[var(--bg-button-primary)] text-[var(--text-button-primary)] p-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--bg-button-primary-hover)] transition-all font-semibold shadow-lg hover:shadow-[var(--shadow-color-accent)]"
+            <div className="flex items-center p-1 rounded-full bg-[var(--bg-input)] border border-[var(--border-secondary)] self-start mb-4">
+                {['create', 'describe'].map((m) => (
+                    <button key={m} onClick={() => setMode(m as 'create' | 'describe')}
+                        className={`relative px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${mode === m ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    >
+                        {mode === m && <motion.div layoutId="mode-pill" className="absolute inset-0 bg-[var(--bg-card)] rounded-full shadow-sm z-0" />}
+                        <span className="relative z-10 capitalize">{m}</span>
+                    </button>
+                ))}
+            </div>
+
+            <AnimatePresence mode="wait">
+                <motion.div key={mode} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }} className="flex-1 flex flex-col">
+                    {mode === 'create' ? (
+                        <div className="flex flex-col h-full">
+                            <h3 className="text-lg font-semibold text-[var(--text-primary)]">Create an Image</h3>
+                            <p className="text-[var(--text-secondary)] text-sm mb-4">Describe the image you want to create.</p>
+                            <AutoCorrectingTextarea value={prompt} setValue={setPrompt} onKeyPress={handleKeyPress}
+                                placeholder="e.g., A majestic crystal palace on a floating island..."
+                                className="w-full bg-[var(--bg-input)] border border-[var(--border-secondary)] rounded-xl p-3 text-[var(--text-primary)] focus:ring-2 focus:ring-[var(--accent-color-1)] focus:outline-none transition-all resize-none placeholder:text-[var(--text-secondary)]"
+                                containerClassName="flex-grow w-full min-h-[150px]" rows={6} disabled={isLoading}
+                            />
+                        </div>
+                    ) : (
+                        <>
+                            <h3 className="text-lg font-semibold text-[var(--text-primary)]">Describe an Image</h3>
+                            <p className="text-[var(--text-secondary)] text-sm mb-4">Upload an image to get an AI-powered description.</p>
+                            <div className="flex-1 flex flex-col items-center justify-center">
+                                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+                                {uploadedImage ? (
+                                    <div className="relative w-full max-w-xs aspect-square">
+                                        <img src={uploadedImage.previewUrl} alt="Upload preview" className="w-full h-full object-contain rounded-lg" />
+                                        <button onClick={handleRemoveImage} className="absolute top-2 right-2 bg-[var(--bg-card)]/70 text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-full backdrop-blur-sm">
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="w-full text-center p-6 border-2 border-dashed border-[var(--border-secondary)] rounded-xl">
+                                        <UploadCloud className="w-12 h-12 mx-auto text-[var(--text-secondary)] mb-2" />
+                                        <p className="text-sm text-[var(--text-primary)] font-semibold">Drag & drop an image here</p>
+                                        <p className="text-xs text-[var(--text-secondary)] my-1">or</p>
+                                        <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 mx-auto text-sm font-medium text-[var(--accent-text)] bg-[var(--accent-color-1)]/10 px-3 py-1.5 rounded-md hover:bg-[var(--accent-color-1)]/20 transition-colors">
+                                            <Paperclip className="w-4 h-4" />
+                                            Attach File
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </motion.div>
+            </AnimatePresence>
+
+          <button onClick={mainAction} disabled={isButtonDisabled}
+            className="w-full mt-auto flex items-center justify-center gap-2 bg-[var(--bg-button-primary)] text-[var(--text-button-primary)] p-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--bg-button-primary-hover)] transition-all font-semibold shadow-lg hover:shadow-[var(--shadow-color-accent)]"
           >
-            <Sparkles className="w-5 h-5"/>
-            Generate Image
+            {mode === 'create' ? <Sparkles className="w-5 h-5"/> : <ArrowRightLeft className="w-5 h-5"/>}
+            {mode === 'create' ? 'Generate Image' : 'Describe Image'}
           </button>
         </div>
         <div className="bg-[var(--bg-card)]/50 border-2 border-dashed border-[var(--border-primary)] rounded-2xl p-4 relative flex justify-center items-center min-h-[300px] lg:min-h-0">
           {isLoading && <LoadingState />}
-          {error && <p className="text-red-500">{error}</p>}
-          {!isLoading && !imageUrl && !error && (
+          {error && <p className="text-red-500 text-center p-4">{error}</p>}
+          {!isLoading && !error && (
             <div className="text-center text-[var(--text-secondary)]">
-              <ImageIcon className="w-16 h-16 mx-auto mb-2 text-[var(--accent-color-1)]" />
-              <p className="font-medium text-[var(--text-primary)]">Your generated image will appear here.</p>
-              <p className="text-sm">Let your creativity flow!</p>
+                {mode === 'create' && !generatedImageUrl && (
+                    <>
+                        <ImageIcon className="w-16 h-16 mx-auto mb-2 text-[var(--accent-color-1)]" />
+                        <p className="font-medium text-[var(--text-primary)]">Your generated image will appear here.</p>
+                    </>
+                )}
+                {mode === 'describe' && !generatedDescription && (
+                    <>
+                         <ImageIcon className="w-16 h-16 mx-auto mb-2 text-[var(--accent-color-1)]" />
+                        <p className="font-medium text-[var(--text-primary)]">The image description will appear here.</p>
+                    </>
+                )}
             </div>
           )}
-          {imageUrl && (
+          {generatedImageUrl && mode === 'create' && (
             <div className="relative group w-full h-full flex justify-center items-center">
-                <motion.img 
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                  src={imageUrl} 
-                  alt="Generated by PAL AI" 
-                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                <motion.img initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.3 }}
+                  src={generatedImageUrl} alt="Generated by PAL AI" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
                 />
-                 <a 
-                    href={imageUrl} 
-                    download="pal-ai-generated-image.png"
+                 <a href={generatedImageUrl} download="pal-ai-generated-image.png"
                     className="absolute bottom-4 right-4 bg-[var(--bg-button-primary)] text-[var(--text-button-primary)] p-2.5 rounded-full hover:bg-[var(--bg-button-primary-hover)] transition-all shadow-lg hover:shadow-[var(--shadow-color-accent)] opacity-0 group-hover:opacity-100"
-                    aria-label="Download Image"
-                    title="Download Image"
-                >
+                    aria-label="Download Image" title="Download Image">
                     <Download className="w-5 h-5" />
                 </a>
             </div>
+          )}
+          {generatedDescription && mode === 'describe' && (
+             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="prose prose-sm text-[var(--prose-text-color)] p-4 overflow-y-auto w-full h-full">
+                <div dangerouslySetInnerHTML={{ __html: marked.parse(generatedDescription) as string }} />
+             </motion.div>
           )}
         </div>
       </div>

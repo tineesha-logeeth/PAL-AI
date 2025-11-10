@@ -1,4 +1,5 @@
-import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse, Part, Content } from "@google/genai";
+import type { ChatMessage } from '../types';
 
 if (!process.env.API_KEY) {
   throw new Error("API_KEY environment variable not set");
@@ -6,28 +7,66 @@ if (!process.env.API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Chat session for the regular chatbot
-const chatSession: Chat = ai.chats.create({
-  model: 'gemini-2.5-flash',
-  config: {
-    systemInstruction: 'You are PAL AI, a friendly and helpful AI assistant. Your answers should be informative and well-formatted in markdown.',
-  },
-});
-
-export const sendMessageStream = (message: string): Promise<AsyncGenerator<GenerateContentResponse>> => {
-  return chatSession.sendMessageStream({ message });
+const modelConfig = {
+    model: 'gemini-2.5-flash',
+    config: {
+      systemInstruction: 'You are PAL AI, a friendly and helpful AI assistant. Your answers should be informative and well-formatted in markdown.',
+    },
 };
 
-// Stateless call for search-grounded queries
-export const sendMessageWithSearch = async (message: string): Promise<GenerateContentResponse> => {
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: message,
-    config: {
-      tools: [{ googleSearch: {} }],
-    },
-  });
-  return response;
+const convertMessagesToContent = (messages: ChatMessage[]): Content[] => {
+    const geminiHistory: Content[] = [];
+    for (const msg of messages) {
+        const parts: Part[] = [];
+        if (msg.content) {
+            parts.push({ text: msg.content });
+        }
+        if (msg.attachment && msg.role === 'user') {
+            parts.push({
+                inlineData: {
+                    data: msg.attachment.data,
+                    mimeType: msg.attachment.mimeType,
+                }
+            });
+        }
+        
+        if (parts.length > 0) {
+            geminiHistory.push({ role: msg.role, parts });
+        }
+    }
+    return geminiHistory;
+}
+
+export const sendMessageStream = (
+  history: ChatMessage[],
+  message: string,
+  attachment?: { data: string; mimeType: string },
+  useSearch?: boolean
+): Promise<AsyncGenerator<GenerateContentResponse>> => {
+    
+    const contents = convertMessagesToContent(history);
+    
+    const userParts: Part[] = [];
+    if (message) {
+      userParts.push({ text: message });
+    }
+    if (attachment) {
+      userParts.push({ inlineData: { data: attachment.data, mimeType: attachment.mimeType }});
+    }
+
+    contents.push({ role: 'user', parts: userParts });
+    
+    // FIX: Conditionally add the `tools` property to the config object to avoid a TypeScript error.
+    const config = {
+      ...modelConfig.config,
+      ...(useSearch && { tools: [{ googleSearch: {} }] }),
+    };
+
+    return ai.models.generateContentStream({
+        model: modelConfig.model,
+        contents: contents,
+        config: config
+    });
 };
 
 // Image generation
@@ -38,7 +77,6 @@ export const generateImage = async (prompt: string): Promise<string> => {
     config: {
       numberOfImages: 1,
       outputMimeType: 'image/png',
-      aspectRatio: '1:1',
     },
   });
 
@@ -48,6 +86,21 @@ export const generateImage = async (prompt: string): Promise<string> => {
   }
   throw new Error("Image generation failed or returned no images.");
 };
+
+// Describe image
+export const describeImage = async (attachment: { data: string; mimeType: string }): Promise<string> => {
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: {
+      parts: [
+        { text: "Describe this image in detail. What are the key objects, colors, and the overall mood? Format your response in markdown." },
+        { inlineData: { data: attachment.data, mimeType: attachment.mimeType } }
+      ]
+    },
+  });
+  return response.text;
+};
+
 
 // General purpose AI tasks
 export const performTask = async (
