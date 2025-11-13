@@ -14,18 +14,6 @@ export interface ChatMessage {
   };
 }
 
-export interface User {
-    name: string;
-    email: string;
-    password?: string; // Only used for mock signup
-}
-
-export interface UserCredentials {
-    email: string;
-    password?: string;
-    name?: string;
-}
-
 export interface ImageGeneratorState {
   prompt: string;
   isLoading: boolean;
@@ -52,4 +40,11 @@ export interface Conversation {
   title: string;
   messages: ChatMessage[];
   timestamp: number;
+}
+
+// FIX: Add UserCredentials interface to resolve import error in AuthModal.tsx
+export interface UserCredentials {
+  email: string;
+  password: string;
+  name: string;
 }

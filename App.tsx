@@ -3,29 +3,26 @@ import Chat from './components/Chat';
 import ImageGenerator from './components/ImageGenerator';
 import Tools from './components/Tools';
 import History from './components/History';
+import Settings from './components/Settings';
 import FloatingParticles from './components/FloatingParticles';
 import ThemeSwitcher from './components/ThemeSwitcher';
-import AuthModal from './components/AuthModal';
 import SplashScreen from './components/SplashScreen'; // Import SplashScreen
 import InteractiveBotIcon from './components/InteractiveBotIcon';
 import { useTheme } from './contexts/ThemeContext';
-import { User, UserCredentials, ImageGeneratorState, ToolsState, Conversation, ChatMessage } from './types';
+import { ImageGeneratorState, ToolsState, Conversation, ChatMessage } from './types';
 import { generateImage, performTask, describeImage } from './services/geminiService';
-import { MessageSquare, Image, Wrench, Menu, History as HistoryIcon, LogOut, User as UserIcon, PlusCircle } from 'lucide-react';
+import { MessageSquare, Image, Wrench, Menu, History as HistoryIcon, PlusCircle, Settings as SettingsIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type Tab = 'chat' | 'image' | 'tools' | 'history';
-type AuthMode = 'login' | 'signup';
+type Tab = 'chat' | 'image' | 'tools' | 'history' | 'settings';
 
 const tabConfig = {
   chat: { label: 'PAL Chat', title: 'Ask PAL' },
   image: { label: 'PAL Gen', title: 'PAL Gen' },
   tools: { label: 'PAL Tools', title: 'PAL Tools' },
   history: { label: 'PAL History', title: 'PAL History' },
+  settings: { label: 'PAL Settings', title: 'PAL Settings' },
 };
-
-// Mock user storage that will be hydrated from localStorage
-let mockUser: User | null = null;
 
 const initialImageGenState: ImageGeneratorState = {
   prompt: '',
@@ -66,9 +63,6 @@ const App: React.FC = () => {
   const [isAppLoading, setIsAppLoading] = useState(true); // State for splash screen
   const [activeTab, setActiveTab] = useState<Tab>(() => (localStorage.getItem('pal-ai-activeTab') as Tab) || 'chat');
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<AuthMode>('login');
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const { theme } = useTheme();
 
   // Lifted state for persistent tasks
@@ -91,14 +85,6 @@ const App: React.FC = () => {
   // Load all persisted state from localStorage on mount
   useEffect(() => {
     try {
-      // User
-      const savedUser = localStorage.getItem('pal-ai-user');
-      if (savedUser) {
-        const parsedUser = JSON.parse(savedUser);
-        mockUser = parsedUser;
-        setCurrentUser(parsedUser);
-      }
-      
       // History and Current Conversation
       const savedHistory = localStorage.getItem('pal-ai-history');
       const loadedHistory = savedHistory ? JSON.parse(savedHistory) : [];
@@ -116,7 +102,6 @@ const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Failed to load data from localStorage", error);
-      mockUser = null;
       setHistory([]);
     }
   }, []);
@@ -225,7 +210,11 @@ const App: React.FC = () => {
       setImageGenState(prev => ({ ...prev, generatedImageUrl: url, isLoading: false }));
     } catch (err) {
       console.error('Image generation error:', err);
-      setImageGenState(prev => ({ ...prev, error: 'Failed to generate image. Please try again.', isLoading: false }));
+      if (err instanceof Error && err.message.toLowerCase().includes('api key')) {
+        // This will be handled by the component's context consumer
+      } else {
+        setImageGenState(prev => ({ ...prev, error: 'Failed to generate image. Please try again.', isLoading: false }));
+      }
     }
   };
 
@@ -241,7 +230,11 @@ const App: React.FC = () => {
       setImageGenState(prev => ({ ...prev, generatedDescription: description, isLoading: false }));
     } catch (err) {
       console.error('Image description error:', err);
-      setImageGenState(prev => ({ ...prev, error: 'Failed to describe image. Please try again.', isLoading: false }));
+      if (err instanceof Error && err.message.toLowerCase().includes('api key')) {
+        // This will be handled by the component's context consumer
+      } else {
+        setImageGenState(prev => ({ ...prev, error: 'Failed to describe image. Please try again.', isLoading: false }));
+      }
     }
   };
 
@@ -260,56 +253,14 @@ const App: React.FC = () => {
       setToolsState(prev => ({ ...prev, outputText: result, isLoading: false }));
     } catch (error) {
       console.error('Error performing task:', error);
-      setToolsState(prev => ({ ...prev, outputText: 'An error occurred. Please try again.', isLoading: false }));
+       if (error instanceof Error && error.message.toLowerCase().includes('api key')) {
+        // This will be handled by the component's context consumer
+      } else {
+        setToolsState(prev => ({ ...prev, outputText: 'An error occurred. Please try again.', isLoading: false }));
+      }
     }
   };
 
-  const handleOpenAuthModal = (mode: AuthMode) => {
-    setAuthMode(mode);
-    setIsAuthModalOpen(true);
-    if (window.innerWidth <= 768) setIsSidebarOpen(false);
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    mockUser = null;
-    try {
-      localStorage.removeItem('pal-ai-user');
-    } catch (error) {
-      console.error("Failed to remove user from localStorage", error);
-    }
-    if (window.innerWidth <= 768) setIsSidebarOpen(false);
-  };
-
-  const handleAuthSuccess = (credentials: UserCredentials, mode: AuthMode): boolean => {
-    if (mode === 'signup') {
-        const newUser: User = {
-            name: credentials.name!,
-            email: credentials.email,
-            password: credentials.password
-        };
-        mockUser = newUser;
-        try {
-            localStorage.setItem('pal-ai-user', JSON.stringify(mockUser));
-        } catch (error) {
-            console.error("Failed to save user to localStorage", error);
-        }
-        setCurrentUser(newUser);
-        setIsAuthModalOpen(false);
-        return true;
-    }
-
-    if (mode === 'login') {
-        if (mockUser && mockUser.email === credentials.email && mockUser.password === credentials.password) {
-            setCurrentUser(mockUser);
-            setIsAuthModalOpen(false);
-            return true;
-        }
-    }
-
-    return false;
-  };
-  
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab);
     if (window.innerWidth <= 768) {
@@ -320,15 +271,17 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'chat':
-        return <Chat messages={currentMessages} setMessages={handleUpdateMessages} />;
+        return <Chat messages={currentMessages} setMessages={handleUpdateMessages} setActiveTab={setActiveTab} />;
       case 'image':
-        return <ImageGenerator state={imageGenState} setState={setImageGenState} onGenerate={handleImageGenerate} onDescribe={handleImageDescribe} />;
+        return <ImageGenerator state={imageGenState} setState={setImageGenState} onGenerate={handleImageGenerate} onDescribe={handleImageDescribe} setActiveTab={setActiveTab} />;
       case 'tools':
-        return <Tools state={toolsState} setState={setToolsState} onPerformTask={handlePerformTask} />;
+        return <Tools state={toolsState} setState={setToolsState} onPerformTask={handlePerformTask} setActiveTab={setActiveTab} />;
       case 'history':
-        return <History history={history} onSelect={handleSelectConversation} onDelete={handleDeleteConversation} onNewChat={handleNewChat} />;
+        return <History history={history} onSelect={handleSelectConversation} onDelete={handleDeleteConversation} onNewChat={handleNewChat} setActiveTab={setActiveTab} />;
+      case 'settings':
+        return <Settings />;
       default:
-        return <Chat messages={currentMessages} setMessages={handleUpdateMessages} />;
+        return <Chat messages={currentMessages} setMessages={handleUpdateMessages} setActiveTab={setActiveTab} />;
     }
   };
 
@@ -404,25 +357,9 @@ const App: React.FC = () => {
                   <NavItem tab="tools" icon={Wrench} label={tabConfig.tools.label} />
                   <NavItem tab="history" icon={HistoryIcon} label={tabConfig.history.label} />
                 </nav>
-                 {/* Mobile Auth Section */}
-                 <div className="md:hidden p-4 border-t border-[var(--border-primary)]">
-                    {currentUser ? (
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <UserIcon className="w-5 h-5 text-[var(--text-secondary)]" />
-                          <span className="text-sm font-medium text-[var(--text-secondary)]">{currentUser.name}</span>
-                        </div>
-                        <button onClick={handleLogout} className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors" aria-label="Log Out">
-                          <LogOut className="w-5 h-5 text-[var(--text-secondary)]" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <button onClick={() => handleOpenAuthModal('login')} className="w-full text-sm font-medium text-center text-[var(--text-secondary)] px-4 py-2 rounded-lg hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors border border-[var(--border-secondary)]">Log In</button>
-                        <button onClick={() => handleOpenAuthModal('signup')} className="w-full text-sm font-medium text-center bg-[var(--bg-button-primary)] text-[var(--text-button-primary)] px-4 py-2 rounded-lg hover:bg-[var(--bg-button-primary-hover)] transition-colors">Sign Up</button>
-                      </div>
-                    )}
-                </div>
+                 <div className="p-4 border-t border-[var(--border-primary)]">
+                    <NavItem tab="settings" icon={SettingsIcon} label={tabConfig.settings.label} />
+                 </div>
               </aside>
 
               <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${isSidebarOpen ? 'md:ml-64' : 'md:ml-0'}`}>
@@ -439,19 +376,6 @@ const App: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-4">
                           <ThemeSwitcher />
-                          {currentUser ? (
-                               <div className="hidden md:flex items-center gap-3">
-                                  <span className="text-sm font-medium text-[var(--text-secondary)] hidden sm:block">Welcome, {currentUser.name}!</span>
-                                  <button onClick={handleLogout} className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors" aria-label="Log Out">
-                                      <LogOut className="w-5 h-5 text-[var(--text-secondary)]" />
-                                  </button>
-                               </div>
-                          ) : (
-                              <div className="hidden md:flex items-center gap-2">
-                                  <button onClick={() => handleOpenAuthModal('login')} className="text-sm font-medium text-[var(--text-secondary)] px-4 py-2 rounded-lg hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors">Log In</button>
-                                  <button onClick={() => handleOpenAuthModal('signup')} className="text-sm font-medium bg-[var(--bg-button-primary)] text-[var(--text-button-primary)] px-4 py-2 rounded-lg hover:bg-[var(--bg-button-primary-hover)] transition-colors">Sign Up</button>
-                              </div>
-                          )}
                       </div>
                   </header>
 
@@ -471,15 +395,6 @@ const App: React.FC = () => {
                   </main>
               </div>
             </div>
-            <AnimatePresence>
-              {isAuthModalOpen && (
-                <AuthModal 
-                  mode={authMode} 
-                  onClose={() => setIsAuthModalOpen(false)} 
-                  onAuthSuccess={handleAuthSuccess}
-                />
-              )}
-            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>

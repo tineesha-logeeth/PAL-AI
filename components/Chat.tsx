@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { marked } from 'marked';
 import type { ChatMessage, Source } from '../types';
 import { sendMessageStream } from '../services/geminiService';
-import { Send, Search, User, Link as LinkIcon, Loader2, Sparkles, Edit3, Code, BrainCircuit, Globe, Film, Paperclip, X, UploadCloud, Dumbbell, Feather, Mail, Users, FileQuestion, MessageCircle } from 'lucide-react';
+import { useApiKey } from '../contexts/ApiKeyContext';
+import { Send, Search, User, Link as LinkIcon, Loader2, Sparkles, Edit3, Code, BrainCircuit, Globe, Film, Paperclip, X, UploadCloud, Dumbbell, Feather, Mail, Users, FileQuestion, MessageCircle, AlertTriangle, Settings, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AutoCorrectingTextarea from './AutoCorrectingTextarea';
 import InteractiveBotIcon from './InteractiveBotIcon';
@@ -89,14 +90,47 @@ const WelcomeScreen = ({ onPromptClick }: { onPromptClick: (prompt: string) => v
 interface ChatProps {
   messages: ChatMessage[];
   setMessages: (messages: ChatMessage[]) => void;
+  setActiveTab: (tab: 'chat' | 'image' | 'tools' | 'history' | 'settings') => void;
 }
 
-const Chat: React.FC<ChatProps> = ({ messages, setMessages }) => {
+const ApiKeyWarning = ({ setActiveTab, error }: { setActiveTab: ChatProps['setActiveTab'], error?: string | null }) => (
+    <div className="flex flex-col items-center justify-center h-full text-center p-4">
+        <div className="bg-[var(--bg-card)] border border-amber-500/30 rounded-2xl p-8 shadow-2xl shadow-amber-500/10 flex flex-col items-center gap-4">
+            <AlertTriangle className="w-16 h-16 text-amber-500" />
+            <h2 className="text-2xl font-bold text-[var(--text-primary)]">API Key Required</h2>
+            <p className="text-[var(--text-secondary)] max-w-sm">
+                {error || "To use PAL Chat, you'll need a Gemini API key. Get one from Google AI Studio and add it in the settings."}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 mt-4 w-full">
+                <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-2 bg-blue-500 text-white font-semibold px-4 py-2.5 rounded-lg hover:bg-blue-600 transition-all"
+                >
+                    <Key className="w-5 h-5" />
+                    Get API Key
+                </a>
+                <button
+                    onClick={() => setActiveTab('settings')}
+                    className="flex-1 flex items-center justify-center gap-2 bg-amber-500 text-white font-semibold px-4 py-2.5 rounded-lg hover:bg-amber-600 transition-all"
+                >
+                    <Settings className="w-5 h-5" />
+                    Go to Settings
+                </button>
+            </div>
+        </div>
+    </div>
+);
+
+const Chat: React.FC<ChatProps> = ({ messages, setMessages, setActiveTab }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [useSearch, setUseSearch] = useState(false);
   const [attachment, setAttachment] = useState<{ data: string; mimeType: string; previewUrl: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  
+  const { isKeySet, apiKeyError, setApiKeyError } = useApiKey();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -161,6 +195,8 @@ const Chat: React.FC<ChatProps> = ({ messages, setMessages }) => {
     if ((!input.trim() && !attachment) || isLoading) return;
     const currentInput = input;
     const currentAttachment = attachment;
+    
+    setApiKeyError(null);
 
     const userMessage: ChatMessage = { 
       role: 'user', 
@@ -216,6 +252,9 @@ const Chat: React.FC<ChatProps> = ({ messages, setMessages }) => {
         }
     } catch (error) {
       console.error('Error sending message:', error);
+      if (error instanceof Error && error.message.toLowerCase().includes('api key')) {
+        setApiKeyError('Your API key seems to be invalid. Please check it in Settings and try again.');
+      }
       const errorMessage: ChatMessage = { role: 'model', content: "Sorry, I encountered an error. Please try again." };
       setMessages([...newMessages, errorMessage]);
     } finally {
@@ -253,6 +292,10 @@ const Chat: React.FC<ChatProps> = ({ messages, setMessages }) => {
     const file = e.dataTransfer.files?.[0];
     processFile(file);
   };
+  
+  if (!isKeySet || apiKeyError) {
+    return <ApiKeyWarning setActiveTab={setActiveTab} error={apiKeyError} />;
+  }
   
   const showWelcome = messages.length === 0;
 

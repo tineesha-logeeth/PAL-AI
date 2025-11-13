@@ -1,11 +1,14 @@
 import { GoogleGenAI, GenerateContentResponse, Part, Content } from "@google/genai";
 import type { ChatMessage } from '../types';
 
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable not set");
+function getAiClient(): GoogleGenAI {
+  const apiKey = localStorage.getItem('pal-ai-apiKey');
+  if (!apiKey) {
+    throw new Error("API key not found. Please set it in the settings.");
+  }
+  return new GoogleGenAI({ apiKey });
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const modelConfig = {
     model: 'gemini-2.5-flash',
@@ -44,6 +47,7 @@ export const sendMessageStream = (
   useSearch?: boolean
 ): Promise<AsyncGenerator<GenerateContentResponse>> => {
     
+    const ai = getAiClient();
     const contents = convertMessagesToContent(history);
     
     const userParts: Part[] = [];
@@ -71,6 +75,7 @@ export const sendMessageStream = (
 
 // Image generation
 export const generateImage = async (prompt: string): Promise<string> => {
+  const ai = getAiClient();
   const response = await ai.models.generateImages({
     model: 'imagen-4.0-generate-001',
     prompt: prompt,
@@ -89,6 +94,7 @@ export const generateImage = async (prompt: string): Promise<string> => {
 
 // Describe image
 export const describeImage = async (attachment: { data: string; mimeType: string }): Promise<string> => {
+  const ai = getAiClient();
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: {
@@ -107,6 +113,7 @@ export const performTask = async (
   prompt: string, 
   model: 'gemini-2.5-pro' | 'gemini-2.5-flash' | 'gemini-2.5-flash-lite'
 ): Promise<string> => {
+  const ai = getAiClient();
   const response = await ai.models.generateContent({
     model: model,
     contents: prompt,
@@ -119,6 +126,7 @@ export const correctGrammar = async (text: string): Promise<string> => {
   if (!text.trim()) {
     return text;
   }
+  const ai = getAiClient();
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-lite',
     contents: `Correct any grammar and spelling mistakes in the following text. Only return the corrected text. Do not add any extra explanations, comments, or markdown formatting. If the text is already correct, return it unchanged. Original text: "${text}"`,

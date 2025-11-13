@@ -1,14 +1,16 @@
 import React from 'react';
 import { marked } from 'marked';
-import { Loader2, Wand2 } from 'lucide-react';
+import { Loader2, Wand2, AlertTriangle, Settings, Key } from 'lucide-react';
 import { motion } from 'framer-motion';
 import AutoCorrectingTextarea from './AutoCorrectingTextarea';
 import { ToolsState, Task, Model } from '../types';
+import { useApiKey } from '../contexts/ApiKeyContext';
 
 interface ToolsProps {
   state: ToolsState;
   setState: React.Dispatch<React.SetStateAction<ToolsState>>;
   onPerformTask: (state: ToolsState) => void;
+  setActiveTab: (tab: 'chat' | 'image' | 'tools' | 'history' | 'settings') => void;
 }
 
 const modelInfo: Record<Model, string> = {
@@ -16,12 +18,58 @@ const modelInfo: Record<Model, string> = {
     'gemini-2.5-flash': "Ideal for fast tasks like proofreading and simple rephrasing."
 }
 
-const Tools: React.FC<ToolsProps> = ({ state, setState, onPerformTask }) => {
+const ApiKeyWarning = ({ setActiveTab, error }: { setActiveTab: ToolsProps['setActiveTab'], error?: string | null }) => (
+    <div className="flex flex-col items-center justify-center h-full text-center p-4">
+        <div className="bg-[var(--bg-card)] border border-amber-500/30 rounded-2xl p-8 shadow-2xl shadow-amber-500/10 flex flex-col items-center gap-4">
+            <AlertTriangle className="w-16 h-16 text-amber-500" />
+            <h2 className="text-2xl font-bold text-[var(--text-primary)]">API Key Required</h2>
+            <p className="text-[var(--text-secondary)] max-w-sm">
+                {error || "To use PAL Tools, you'll need a Gemini API key. Get one from Google AI Studio and add it in the settings."}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 mt-4 w-full">
+                <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-2 bg-blue-500 text-white font-semibold px-4 py-2.5 rounded-lg hover:bg-blue-600 transition-all"
+                >
+                    <Key className="w-5 h-5" />
+                    Get API Key
+                </a>
+                <button
+                    onClick={() => setActiveTab('settings')}
+                    className="flex-1 flex items-center justify-center gap-2 bg-amber-500 text-white font-semibold px-4 py-2.5 rounded-lg hover:bg-amber-600 transition-all"
+                >
+                    <Settings className="w-5 h-5" />
+                    Go to Settings
+                </button>
+            </div>
+        </div>
+    </div>
+);
+
+const Tools: React.FC<ToolsProps> = ({ state, setState, onPerformTask, setActiveTab }) => {
   const { inputText, outputText, isLoading, selectedTask, selectedModel } = state;
+  const { isKeySet, apiKeyError, setApiKeyError } = useApiKey();
 
   const setInputText = (newText: string) => {
     setState(prev => ({ ...prev, inputText: newText }));
   };
+
+  const handlePerformTask = async () => {
+    setApiKeyError(null);
+    try {
+        await onPerformTask(state);
+    } catch (err) {
+        if (err instanceof Error && err.message.toLowerCase().includes('api key')) {
+            setApiKeyError('Your API key appears to be invalid. Please check it in Settings.');
+        }
+    }
+  };
+  
+  if (!isKeySet || apiKeyError) {
+    return <ApiKeyWarning setActiveTab={setActiveTab} error={apiKeyError} />;
+  }
 
   return (
     <div className="flex flex-col h-full p-4 md:p-6 overflow-y-auto">
@@ -82,7 +130,7 @@ const Tools: React.FC<ToolsProps> = ({ state, setState, onPerformTask }) => {
           </div>
         </div>
         <button
-          onClick={() => onPerformTask(state)}
+          onClick={handlePerformTask}
           disabled={isLoading || !inputText.trim()}
           className="w-full md:w-1/2 mx-auto flex items-center justify-center gap-2 bg-[var(--bg-button-primary)] text-[var(--text-button-primary)] p-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--bg-button-primary-hover)] transition-all font-semibold shadow-lg hover:shadow-[var(--shadow-color-accent)]"
         >

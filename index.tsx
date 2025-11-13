@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { ApiKeyProvider } from './contexts/ApiKeyContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 
 const rootElement = document.getElementById('root');
@@ -12,7 +13,9 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ThemeProvider>
-      <App />
+      <ApiKeyProvider>
+        <App />
+      </ApiKeyProvider>
     </ThemeProvider>
   </React.StrictMode>
 );

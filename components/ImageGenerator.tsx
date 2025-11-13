@@ -1,15 +1,17 @@
 import React, { useRef, useState } from 'react';
 import { marked } from 'marked';
-import { Image as ImageIcon, Loader2, Sparkles, Download, ArrowRightLeft, UploadCloud, Paperclip, X } from 'lucide-react';
+import { Image as ImageIcon, Loader2, Sparkles, Download, ArrowRightLeft, UploadCloud, Paperclip, X, AlertTriangle, Settings, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AutoCorrectingTextarea from './AutoCorrectingTextarea';
 import { ImageGeneratorState } from '../types';
+import { useApiKey } from '../contexts/ApiKeyContext';
 
 interface ImageGeneratorProps {
   state: ImageGeneratorState;
   setState: React.Dispatch<React.SetStateAction<ImageGeneratorState>>;
   onGenerate: (state: ImageGeneratorState) => void;
   onDescribe: (state: ImageGeneratorState) => void;
+  setActiveTab: (tab: 'chat' | 'image' | 'tools' | 'history' | 'settings') => void;
 }
 
 const LoadingState = () => (
@@ -20,15 +22,47 @@ const LoadingState = () => (
     </div>
 );
 
-const ImageGenerator: React.FC<ImageGeneratorProps> = ({ state, setState, onGenerate, onDescribe }) => {
+const ApiKeyWarning = ({ setActiveTab, error }: { setActiveTab: ImageGeneratorProps['setActiveTab'], error?: string | null }) => (
+    <div className="flex flex-col items-center justify-center h-full text-center p-4">
+        <div className="bg-[var(--bg-card)] border border-amber-500/30 rounded-2xl p-8 shadow-2xl shadow-amber-500/10 flex flex-col items-center gap-4">
+            <AlertTriangle className="w-16 h-16 text-amber-500" />
+            <h2 className="text-2xl font-bold text-[var(--text-primary)]">API Key Required</h2>
+            <p className="text-[var(--text-secondary)] max-w-sm">
+                 {error || "To use PAL Gen, you'll need a Gemini API key. Get one from Google AI Studio and add it in the settings."}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 mt-4 w-full">
+                <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 flex items-center justify-center gap-2 bg-blue-500 text-white font-semibold px-4 py-2.5 rounded-lg hover:bg-blue-600 transition-all"
+                >
+                    <Key className="w-5 h-5" />
+                    Get API Key
+                </a>
+                <button
+                    onClick={() => setActiveTab('settings')}
+                    className="flex-1 flex items-center justify-center gap-2 bg-amber-500 text-white font-semibold px-4 py-2.5 rounded-lg hover:bg-amber-600 transition-all"
+                >
+                    <Settings className="w-5 h-5" />
+                    Go to Settings
+                </button>
+            </div>
+        </div>
+    </div>
+);
+
+const ImageGenerator: React.FC<ImageGeneratorProps> = ({ state, setState, onGenerate, onDescribe, setActiveTab }) => {
   const { prompt, isLoading, generatedImageUrl, generatedDescription, error, mode, uploadedImage } = state;
+  const { isKeySet, apiKeyError, setApiKeyError } = useApiKey();
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey && mode === 'create') {
       e.preventDefault();
-      onGenerate(state);
+      handleAction(onGenerate);
     }
   };
 
@@ -97,14 +131,31 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({ state, setState, onGene
     setState(prev => ({ ...prev, uploadedImage: null }));
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+  
+  const handleAction = async (action: (state: ImageGeneratorState) => void) => {
+    setApiKeyError(null);
+    try {
+      await action(state);
+    } catch (err) {
+        if (err instanceof Error && err.message.toLowerCase().includes('api key')) {
+            setApiKeyError('Your API key appears to be invalid. Please check it in Settings.');
+        }
+        // Other errors are handled in App.tsx
+    }
+  };
 
   const mainAction = () => {
     if (mode === 'create') {
-        onGenerate(state);
+        handleAction(onGenerate);
     } else {
-        onDescribe(state);
+        handleAction(onDescribe);
     }
   };
+
+  if (!isKeySet || apiKeyError) {
+    return <ApiKeyWarning setActiveTab={setActiveTab} error={apiKeyError} />;
+  }
+
   const isButtonDisabled = isLoading || (mode === 'create' && !prompt.trim()) || (mode === 'describe' && !uploadedImage);
 
   return (
