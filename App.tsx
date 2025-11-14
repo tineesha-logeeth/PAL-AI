@@ -144,32 +144,49 @@ const App: React.FC = () => {
   // --- End of State Persistence Effects ---
 
   const handleUpdateMessages = (newMessages: ChatMessage[]) => {
-    // If it's a new conversation (no ID yet)
-    if (!currentConversationId && newMessages.length > 0) {
-        const newId = Date.now().toString();
-        setCurrentConversationId(newId); // Set ID for subsequent updates
-
-        const newConversation: Conversation = {
-            id: newId,
-            title: newMessages[0].content.substring(0, 40) + (newMessages[0].content.length > 40 ? '...' : ''),
-            messages: newMessages,
-            timestamp: Date.now(),
-        };
-        
-        setHistory(prev => [newConversation, ...prev].sort((a,b) => b.timestamp - a.timestamp));
-    } 
-    // If it's an existing conversation
-    else if (currentConversationId) {
-        setHistory(prev => 
-            prev.map(conv => 
-                conv.id === currentConversationId 
-                    ? { ...conv, messages: newMessages, timestamp: Date.now() } 
-                    : conv
-            ).sort((a, b) => b.timestamp - a.timestamp)
-        );
-    }
-    
     setCurrentMessages(newMessages);
+
+    // Use a functional update for the conversation ID to ensure we have the latest value
+    // even during rapid successive calls, preventing race conditions.
+    setCurrentConversationId(prevId => {
+      // Determine the active ID for this update cycle.
+      // If we don't have a previous ID and there are messages, it's a new chat.
+      const activeId = prevId || (newMessages.length > 0 ? Date.now().toString() : null);
+
+      if (activeId) {
+        // Now, update the history using the determined activeId.
+        setHistory(prevHistory => {
+          const conversationExists = prevHistory.some(conv => conv.id === activeId);
+
+          if (conversationExists) {
+            // Conversation exists, so we update it.
+            return prevHistory
+              .map(conv =>
+                conv.id === activeId
+                  ? { ...conv, messages: newMessages, timestamp: Date.now() }
+                  : conv
+              )
+              .sort((a, b) => b.timestamp - a.timestamp);
+          } else if (newMessages.length > 0) {
+            // Conversation does not exist, so we create it.
+            // This handles both brand new conversations and the race condition where
+            // the ID was just created but the history state hasn't updated yet.
+            const newConversation: Conversation = {
+              id: activeId,
+              title: newMessages[0].content.substring(0, 40) + (newMessages[0].content.length > 40 ? '...' : ''),
+              messages: newMessages,
+              timestamp: Date.now(),
+            };
+            return [newConversation, ...prevHistory].sort((a, b) => b.timestamp - a.timestamp);
+          }
+          // If there's an ID but no messages and it doesn't exist, do nothing.
+          return prevHistory;
+        });
+      }
+      
+      // Return the ID to update the state for the next render.
+      return activeId;
+    });
   };
 
   const handleNewChat = () => {
